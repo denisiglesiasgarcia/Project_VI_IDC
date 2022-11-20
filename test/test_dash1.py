@@ -19,12 +19,12 @@ import geopandas as gpd
 app = Dash(__name__)
 
 # dataframe pour la vue canton
-df1 = pd.read_csv(r"C:\Users\denis.iglesias\sourcetree\Project_VI_IDC\SCANE_INDICE_MOYENNES_3_ANS.csv", sep=';', usecols= ['ANNEE', 'EGID', 'ADRESSE', 'SRE', 'INDICE'], encoding='latin1')
+df1 = pd.read_csv(r"SCANE_INDICE_MOYENNES_3_ANS.csv", sep=';', usecols= ['ANNEE', 'EGID', 'ADRESSE', 'SRE', 'INDICE'], encoding='latin1')
 # geojson
-with open(r"C:\Users\denis.iglesias\sourcetree\Project_VI_IDC\test\indice3ans_epsg_4326_light.geojson", encoding='latin1') as f:
+with open(r"test/indice3ans_epsg_4326_light.geojson", encoding='latin1') as f:
     geojson_idc = geojson.load(f)
 # geodataframe du geojson
-gdf = gpd.read_file(r"C:\Users\denis.iglesias\sourcetree\Project_VI_IDC\test\indice3ans_epsg_4326.geojson")
+gdf = gpd.read_file(r"test/indice3ans_epsg_4326.geojson")
 
 # année dropdown
 dropdown_annee = df1.ANNEE.unique()
@@ -107,7 +107,7 @@ app.layout = html.Div(
                         dcc.Dropdown(
                             id="dropdown_annee_idc",
                             options=dropdown_annee,
-                            value="2021",
+                            value=2021,
                             clearable=False,
                             searchable=False,
                             className="dropdown",
@@ -188,6 +188,7 @@ def update_graph(nom_rue):
     multipolygon = gdf1['geometry'].iloc[0]
 
     points = []
+    #todo optimize?
     for polygon in multipolygon:
         points.extend(polygon.exterior.coords[:-1])
     coordonnees_rue_lon = points[0][0]
@@ -249,18 +250,18 @@ def update_histo(nom_rue, annee_idc):
     df_plot3 = df_plot3.sort_values(by=['ANNEE'])
     df_plot3 = df_plot3[df_plot3['ANNEE']==annee_idc]
     # calcul valeur idc sur histogramme
-    idc_annee_calcul = df1[df1['ADRESSE']==nom_rue]
-    idc_annee_calcul = idc_annee_calcul[['ANNEE','INDICE']]
-    idc_annee_calcul = df_plot3.loc[df_plot3['ANNEE'] == annee_idc, 'INDICE'].iloc[0]
+    idc_annee_calcul = df1[['ADRESSE','ANNEE','INDICE']]
+    idc_annee_calcul = idc_annee_calcul[(idc_annee_calcul['ADRESSE']==nom_rue) & (idc_annee_calcul['ANNEE'] == annee_idc)]
+    idc_annee_calcul = idc_annee_calcul.iloc[0][2]
     # histo
     fig3 = px.histogram(df_plot3, x='INDICE', pattern_shape='renovation', nbins=25, pattern_shape_sequence=["", "/"])
     ## ligne verticale
-    fig3.add_vline(x=idc_annee_calcul, line_dash = 'dash', line_color = 'black', name=nom_rue)
+    #fig3.add_vline(x=idc_annee_calcul, line_dash = 'dash', line_color = 'black', name=nom_rue)
     fig3.add_trace(go.Scatter(x=[idc_annee_calcul,idc_annee_calcul],
-        y=[500,500], 
+        y=[25,2500], 
         mode='lines', 
         line=dict(color='black', width=2, dash='dash'),
-        name=nom_rue))
+        name=nom_rue + ' IDC ' + str(annee_idc)))
     ## rendre joli le truc
     fig3.update_layout(
         title="Histogramme des bâtiments du canton " + str(annee_idc),
