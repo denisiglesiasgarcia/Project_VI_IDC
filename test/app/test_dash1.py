@@ -19,12 +19,12 @@ import geopandas as gpd
 app = Dash(__name__)
 
 # dataframe pour la vue canton
-df1 = pd.read_csv(r"SCANE_INDICE_MOYENNES_3_ANS.csv", sep=';', usecols= ['ANNEE', 'EGID', 'ADRESSE', 'SRE', 'INDICE'], encoding='latin1')
+df1 = pd.read_csv(r"../data/SCANE_INDICE_MOYENNES_3_ANS.csv", sep=';', usecols= ['ANNEE', 'EGID', 'ADRESSE', 'SRE', 'INDICE'], encoding='latin1')
 # geojson
-with open(r"test/indice3ans_epsg_4326_light.geojson", encoding='latin1') as f:
+with open(r"../data/indice3ans_epsg_4326_light.geojson", encoding='latin1') as f:
     geojson_idc = geojson.load(f)
 # geodataframe du geojson
-gdf = gpd.read_file(r"test/indice3ans_epsg_4326.geojson")
+gdf = gpd.read_file(r"../data/indice3ans_epsg_4326.geojson")
 
 # année dropdown
 dropdown_annee = df1.ANNEE.unique()
