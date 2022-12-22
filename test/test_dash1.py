@@ -225,12 +225,12 @@ def update_bars(nom_rue):
         xaxis = dict(tickmode = 'linear', dtick = 1),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        modebar = dict(bgcolor='rgba(0, 0, 0, 0)') # RGB (224,215,255) rgba(0, 0, 0, 0)
+        modebar = dict(bgcolor='rgba(0, 0, 0, 0)')
         #bargap=0.0
         )
     fig2.update_traces(marker=dict(
-        color="#E0D7FF"), #teal
-        width = 0.1, #0.2
+        color="teal"),
+        width = 0.2,
         textfont_size=12,
         textangle=0,
         textposition="outside",
@@ -260,7 +260,7 @@ def update_histo(nom_rue, annee_idc):
     fig3.add_trace(go.Scatter(x=[idc_annee_calcul,idc_annee_calcul],
         y=[25,2500], 
         mode='lines', 
-        line=dict(color='black', width=3, dash='dash'),
+        line=dict(color='black', width=2, dash='dash'),
         name=nom_rue + ' IDC ' + str(annee_idc)))
     ## rendre joli le truc
     fig3.update_layout(
