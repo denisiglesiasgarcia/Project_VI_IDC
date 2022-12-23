@@ -1,0 +1,14 @@
+FROM postgis/postgis
+ RUN apt-get update
+ RUN apt-get install nano
+
+ RUN apt-get install -y libgdal-dev
+ RUN apt-get update &&\
+    apt-get install -y binutils libproj-dev gdal-bin
+
+ COPY app/ app/
+ COPY data/ test/
+
+ #CMD ['ogr2ogr',' -f "PostgreSQL" PG:"host=127.0.0.1 dbname=postgres user=postgres password=docker" "test/indice3ans_epsg_4326.geojson']
+ #RUN ogr2ogr -f "PostgreSQL" PG:"host=127.0.0.1 dbname=postgres user=postgres password=docker" "test/indice3ans_epsg_4326.geojson"
+ #CMD ["/bin/sh","data/start.sh"]

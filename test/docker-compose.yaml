@@ -5,30 +5,39 @@ volumes:
   postgis-data:
 
 services:
-
+  net:
+    image : nginx
+    ports:
+      - "80:8050"
+    environment:
+     - NGINX_PORT=80
   db:
-    image: postgres:13.2
+    build:
+      dockerfile: DockerfileDB
     volumes:
-      - /data:/var/lib/postgresql/data
+      - ./data:/test
     environment:
       # If you need to create multiple database you can add coma separated databases eg gis,data
-      - POSTGRES_DB=gis
-      - POSTGRES_USER=postgres
+      - POSTGRES_DB=postgres
       - POSTGRES_PASS=docker
       - POSTGRES_PASSWORD=docker
       - ALLOW_IP_RANGE=0.0.0.0/0
       # Add extensions you need to be enabled by default in the DB. Default are the five specified below
-      - POSTGRES_MULTIPLE_EXTENSIONS=postgis,hstore,postgis_topology,postgis_raster,pgrouting
+      - POSTGRES_MULTIPLE_EXTENSIONS=postgis #,hstore,postgis_topology,postgis_raster,pgrouting
     ports:
       - "5432:5432"
+    expose:
+      - 5432
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       timeout: 20s
       retries: 10
+    network_mode: "host"
 
   web:
-    build: .
+    build:
+      dockerfile: DockerfileWeb
     ports:
       - "8050:8050"
     volumes:
@@ -36,4 +45,4 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    network_mode: host
+    network_mode: "host"
