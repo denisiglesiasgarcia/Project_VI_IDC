@@ -235,7 +235,7 @@ def update_bars(nom_rue):
         #bargap=0.0
         )
     fig2.update_traces(marker=dict(
-        color="#E0D7FF"), #teal
+        color="teal"), #teal
         width = 0.1, #0.2
         textfont_size=12,
         textangle=0,
