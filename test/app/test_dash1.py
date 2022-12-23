@@ -17,26 +17,26 @@ import geopandas as gpd
 import psycopg2
 
 
-conn = psycopg2.connect(database='postgres', user='postgres', password='docker', host='127.0.0.1', port='5432')
-curs = conn.cursor()
+#conn = psycopg2.connect(database='postgres', user='postgres', password='docker', host='127.0.0.1', port='5432')
+#curs = conn.cursor()
 
 
 app = Dash(__name__)
 
 # dataframe pour la vue canton
-df1 = pd.read_csv(r"data/SCANE_INDICE_MOYENNES_3_ANS.csv", sep=';', usecols= ['ANNEE', 'EGID', 'ADRESSE', 'SRE', 'INDICE'], encoding='latin1')
+df1 = pd.read_csv(r"../data/SCANE_INDICE_MOYENNES_3_ANS.csv", sep=';', usecols= ['ANNEE', 'EGID', 'ADRESSE', 'SRE', 'INDICE'], encoding='latin1')
 # geojson
-with open(r"data/indice3ans_epsg_4326.geojson", encoding='latin1') as f:
+with open(r"../data/indice3ans_epsg_4326_superlight.geojson", encoding='latin1') as f:
     geojson_idc = geojson.load(f)
 # geodataframe du geojson
-gdf = gpd.read_file(r"data/indice3ans_epsg_4326.geojson")
+gdf = gpd.read_file(r"../data/indice3ans_epsg_4326_superlight.geojson")
 
 # année dropdown
-dropdown_annee = df1.ANNEE.unique()
+dropdown_annee = gdf.ANNEE.unique()
 dropdown_annee.sort()
 # rues dropdown
-df1['ADRESSE'] = df1['ADRESSE'].astype(str)
-dropdown_rues = df1.ADRESSE.unique()
+gdf['ADRESSE'] = gdf['ADRESSE'].astype(str)
+dropdown_rues = gdf.ADRESSE.unique()
 dropdown_rues = np.sort(dropdown_rues)
 
 # histogramme
@@ -207,7 +207,7 @@ def update_graph(nom_rue):
                             featureidkey="properties.ADRESSE",
                             center={"lat": coordonnees_rue_lat, "lon": coordonnees_rue_lon},
                             mapbox_style="carto-positron",
-                            title="Carte d'indice coloré pour " + str(nom_rue),
+                            title="Plan de situation d'indice pour " + str(nom_rue),
                             zoom=17)
     return fig1
 
