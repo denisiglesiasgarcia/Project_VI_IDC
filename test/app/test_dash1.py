@@ -181,10 +181,12 @@ app.layout = html.Div(
 # plan rue
 @app.callback(
     Output('plan_vue_rue', 'figure'),
-    Input('dropdown_nom_rue', 'value'))
-def update_graph(nom_rue):
+    Input('dropdown_nom_rue', 'value'),
+    Input('dropdown_annee_idc', 'value'))
+def update_graph(nom_rue, annee_idc):
     # filter les données. Pas sur que ça soit utile
     df_rue = df1[df1['ADRESSE']==nom_rue]
+    df_rue = df_rue[df_rue['ANNE']==annee_idc]
     # avoir les coordonnées lat/lon pour le plan zoom. Sûrement on peut simplifier
     gdf1 = gdf[['ADRESSE', 'geometry']]
     gdf1 = gdf1.drop_duplicates(subset=['ADRESSE'])
@@ -282,7 +284,7 @@ def update_histo(nom_rue, annee_idc):
         modebar = dict(bgcolor='rgba(0, 0, 0, 0)'),
         bargap=0.10)
     ## couleur de histo
-    fig3.update_traces(marker=dict(color="teal",line_color="black"))
+    fig3.update_traces(marker=dict(color="teal", line_color="black"))
     return fig3
 
 # --------------------------------------------------------------

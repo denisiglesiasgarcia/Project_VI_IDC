@@ -13,6 +13,6 @@ FROM python:3.8-slim-buster
 
  COPY app/ app/
  COPY data/ data/
- CMD ['ogr2ogr',' -f "PostgreSQL" PG:"host=127.0.0.1 dbname=postgres user=postgres password=docker" "data/indice3ans_epsg_4326.geojson']
+ CMD ['ogr2ogr',' -f "PostgreSQL" PG:"host=db dbname=postgres user=postgres password=docker" "data/indice3ans_epsg_4326.geojson']
  CMD ["python", "app/test_dash1.py"]
  #CMD ["sleep", "infinity"]
