@@ -13,56 +13,79 @@ import pandas as pd
 import geojson
 import numpy as np
 import plotly.graph_objects as go
-import geopandas as gpd
 import psycopg2
+from psycopg2 import sql
+import geopandas as gpd
+import json
 
+POSTGRES_PASSWORD='postgis'
+POSTGRES_USER='postgis'
+POSTGRES_DB='mydatabase'
+POSTGRES_table_name='indice3ans_epsg_4326_superlight'
+POSTGRES_HOST='localhost'
+POSTGRES_PORT='5432'
 
-#conn = psycopg2.connect(database='postgres', user='postgres', password='docker', host='127.0.0.1', port='5432')
-#curs = conn.cursor()
 
 
 app = Dash(__name__)
 
-# dataframe pour la vue canton
-df1 = pd.read_csv(r"../data/SCANE_INDICE_MOYENNES_3_ANS.csv", sep=';', usecols= ['ANNEE', 'EGID', 'ADRESSE', 'SRE', 'INDICE'], encoding='latin1')
-# geojson
-with open(r"../data/indice3ans_epsg_4326_superlight.geojson", encoding='latin1') as f:
-    geojson_idc = geojson.load(f)
-# geodataframe du geojson
-gdf = gpd.read_file(r"../data/indice3ans_epsg_4326_superlight.geojson")
-
 # année dropdown
-dropdown_annee = gdf.ANNEE.unique()
-dropdown_annee.sort()
+with psycopg2.connect(database=POSTGRES_DB,
+                      user=POSTGRES_USER,
+                      password=POSTGRES_PASSWORD,
+                      host=POSTGRES_HOST,
+                      port=POSTGRES_PORT) as conn:
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT DISTINCT ANNEE 
+            FROM """ + POSTGRES_table_name + """
+            ORDER BY ANNEE ASC;
+        """)
+        results_dropdown_annee = cur.fetchall()
+dropdown_annee = [{"label": i[0], "value": i[0]} for i in results_dropdown_annee]
+
 # rues dropdown
-gdf['ADRESSE'] = gdf['ADRESSE'].astype(str)
-dropdown_rues = gdf.ADRESSE.unique()
-dropdown_rues = np.sort(dropdown_rues)
+with psycopg2.connect(database=POSTGRES_DB,
+                      user=POSTGRES_USER,
+                      password=POSTGRES_PASSWORD,
+                      host=POSTGRES_HOST,
+                      port=POSTGRES_PORT) as conn:
+       with conn.cursor() as cur:
+        cur.execute("""
+            SELECT DISTINCT ADRESSE 
+            FROM """ + POSTGRES_table_name + """
+            ORDER BY ADRESSE ASC;
+        """)
+        results_dropdown_rues = cur.fetchall()
+dropdown_rues = [{"label": i[0], "value": i[0]} for i in results_dropdown_rues]
+
 
 # histogramme
 ## limiter les outliers
 limite_outlier = 1000
 ## colonnes pour indiquer si réno obligatoire
-def categorise(row):
-    if row['INDICE'] < 450:
-        return 'En dessous du seuil limite légal de 450 MJ/(m²*an)'
-    else:
-        return 'Audit énergétique et travaux obligatoires'
-df1['renovation'] = df1.apply(lambda row: categorise(row), axis=1)
+# alter and update table
+with psycopg2.connect(database=POSTGRES_DB,
+                      user=POSTGRES_USER,
+                      password=POSTGRES_PASSWORD,
+                      host=POSTGRES_HOST,
+                      port=POSTGRES_PORT) as conn:
+      with conn.cursor() as cur:
+        cur.execute("""
+            ALTER TABLE """ + POSTGRES_table_name + """
+            ADD COLUMN IF NOT EXISTS renovation TEXT;
+        """)
+        conn.commit() # We commit the transaction because ALTER is a DDL(Data Definition Language) command.
 
-
-
-'''
-fig = px.choropleth_mapbox(df1,
-                            geojson=geojson_idc,
-                            color="INDICE",
-                            locations="ADRESSE",
-                            featureidkey="properties.ADRESSE",
-                            center={"lat": 46.2022200, "lon": 6.1456900},
-                            mapbox_style="carto-positron",
-                            zoom=11)
-'''
-
+        cur.execute("""
+            UPDATE """ + POSTGRES_table_name + """
+            SET renovation = 
+                CASE
+                    WHEN INDICE < 450 THEN 'En dessous du seuil limite légal de 450 MJ/(m²*an)'
+                    ELSE 'Audit énergétique et travaux obligatoires'
+                END;
+        """)
+        conn.commit() # commit this transaction as well
 
 # --------------------------------------------------------------
 
@@ -148,34 +171,6 @@ app.layout = html.Div(
         ),
     ]
 )
-'''    
-    #dropdown rues
-    html.Div(children=[html.Br(),
-        html.Label('Sélectionner nom de rue'),
-        dcc.Dropdown(dropdown_rues,
-                    'Rue CAVOUR 20',
-                    multi=False,
-                    id='dropdown_nom_rue')],
-                    style={'padding': 10, 'flex': 1}),
-    #dropdown année
-    dcc.Dropdown(dropdown_annee,
-        '2021',
-        id='dropdown_annee_idc'),
-    
-    #graphique zoom sur rue
-    dcc.Graph(
-        id='plan_vue_rue'
-        ),
-    #graphique de bars idc
-    dcc.Graph(
-        id='graphique_bars_idc'
-        ),
-    #graphique histo comparatif
-    dcc.Graph(
-        id='graphique_histo_canton'
-        )
-])
-'''
 
 # --------------------------------------------------------------
 # plan rue
@@ -184,33 +179,40 @@ app.layout = html.Div(
     Input('dropdown_nom_rue', 'value'),
     Input('dropdown_annee_idc', 'value'))
 def update_graph(nom_rue, annee_idc):
-    # filter les données. Pas sur que ça soit utile
-    df_rue = df1[df1['ADRESSE']==nom_rue]
-    df_rue = df_rue[df_rue['ANNE']==annee_idc]
-    # avoir les coordonnées lat/lon pour le plan zoom. Sûrement on peut simplifier
-    gdf1 = gdf[['ADRESSE', 'geometry']]
-    gdf1 = gdf1.drop_duplicates(subset=['ADRESSE'])
-    gdf1 = gdf1.sort_values(by=['ADRESSE'])
-    gdf1 = gdf1[gdf1['ADRESSE']==nom_rue]
-    multipolygon = gdf1['geometry'].iloc[0]
+    
+    conn = psycopg2.connect(
+        dbname="mydatabase",
+        user="postgis",
+        password="postgis",
+        host="localhost",
+        port="5432"
+    )
 
-    points = []
-    #todo optimize?
-    for polygon in multipolygon:
-        points.extend(polygon.exterior.coords[:-1])
-    coordonnees_rue_lon = points[0][0]
-    coordonnees_rue_lat = points[0][1]
+    sql_query = f"""
+        SELECT *,
+            ST_Y(ST_Centroid(ST_Transform(geometry, 4326))) AS coordonnees_rue_lat,
+            ST_X(ST_Centroid(ST_Transform(geometry, 4326))) AS coordonnees_rue_lon
+        FROM indice3ans_epsg_4326_superlight
+        WHERE "ADRESSE" = %s AND "ANNE" = %s
+    """
 
-    # Plan        
+    df_rue = gpd.read_postgis(sql_query, params=(nom_rue, annee_idc), con=conn, geom_col='geometry')
+
+    conn.close()
+
+    # Convert the GeoDataFrame to GeoJSON
+    geojson_idc = json.loads(df_rue.to_json())
+
+    # Plan
     fig1 = px.choropleth_mapbox(df_rue,
-                            geojson=geojson_idc,
-                            color="INDICE",
-                            locations="ADRESSE",
-                            featureidkey="properties.ADRESSE",
-                            center={"lat": coordonnees_rue_lat, "lon": coordonnees_rue_lon},
-                            mapbox_style="carto-positron",
-                            title="Plan de situation d'indice pour " + str(nom_rue),
-                            zoom=17)
+                                geojson=geojson_idc,
+                                color="INDICE",
+                                locations="ADRESSE",
+                                featureidkey="properties.ADRESSE",
+                                center={"lat": df_rue['coordonnees_rue_lat'].iloc[0], "lon": df_rue['coordonnees_rue_lon'].iloc[0]},
+                                mapbox_style="carto-positron",
+                                title="Plan de situation d'indice pour " + str(nom_rue),
+                                zoom=17)
     return fig1
 
 # graphique bars
@@ -218,11 +220,25 @@ def update_graph(nom_rue, annee_idc):
     Output('graphique_bars_idc', 'figure'),
     Input('dropdown_nom_rue', 'value'))
 def update_bars(nom_rue):
-    # filtrer dataframe
-    df_plot2 = df1[df1['ADRESSE']==nom_rue]
-    df_plot2 = df_plot2[['ANNEE','INDICE']]
-    df_plot2 = df_plot2.sort_values(by=['ANNEE'])
-    # bars
+    conn = psycopg2.connect(
+        dbname="mydatabase",
+        user="postgis",
+        password="postgis",
+        host="localhost",
+        port="5432"
+    )
+
+    sql_query = f"""
+        SELECT "ANNEE", "INDICE"
+        FROM indice3ans_epsg_4326_superlight
+        WHERE "ADRESSE" = %s
+        ORDER BY "ANNEE"
+    """
+
+    df_plot2 = pd.read_sql_query(sql_query, params=(nom_rue,), con=conn)
+
+    conn.close()
+
     fig2 = px.bar(df_plot2, x='ANNEE', y='INDICE', text_auto=True)
 
     fig2.update_layout(
@@ -252,15 +268,35 @@ def update_bars(nom_rue):
     Output('graphique_histo_canton', 'figure'),
     Input('dropdown_nom_rue', 'value'),
     Input('dropdown_annee_idc', 'value'))
+
 def update_histo(nom_rue, annee_idc):
-    df_plot3 = df1[['ANNEE','INDICE','renovation']]
-    df_plot3 = df_plot3[df_plot3['INDICE']< limite_outlier]
-    df_plot3 = df_plot3.sort_values(by=['ANNEE'])
-    df_plot3 = df_plot3[df_plot3['ANNEE']==annee_idc]
-    # calcul valeur idc sur histogramme
-    idc_annee_calcul = df1[['ADRESSE','ANNEE','INDICE']]
-    idc_annee_calcul = idc_annee_calcul[(idc_annee_calcul['ADRESSE']==nom_rue) & (idc_annee_calcul['ANNEE'] == annee_idc)]
-    idc_annee_calcul = idc_annee_calcul.iloc[0][2]
+    conn = psycopg2.connect(
+        dbname="mydatabase",
+        user="postgis",
+        password="postgis",
+        host="localhost",
+        port="5432"
+    )
+
+    sql_query = f"""
+        SELECT "ANNEE", "INDICE", "renovation"
+        FROM your_table_name
+        WHERE "INDICE" < %s AND "ANNEE" = %s
+        ORDER BY "ANNEE"
+    """
+
+    df_plot3 = pd.read_sql_query(sql_query, params=(limite_outlier, annee_idc), con=conn)
+
+    sql_query_idc = f"""
+        SELECT "INDICE"
+        FROM your_table_name
+        WHERE "ADRESSE" = %s AND "ANNEE" = %s
+    """
+
+    idc_annee_calcul = pd.read_sql_query(sql_query_idc, params=(nom_rue, annee_idc), con=conn).iloc[0][0]
+
+    conn.close()
+
     # histo
     fig3 = px.histogram(df_plot3, x='INDICE', pattern_shape='renovation', nbins=25, pattern_shape_sequence=["", "/"])
     ## ligne verticale

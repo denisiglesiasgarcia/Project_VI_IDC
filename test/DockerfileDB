@@ -1,14 +1,19 @@
+# Using postgis/postgis as a base image
 FROM postgis/postgis
- RUN apt-get update
- RUN apt-get install nano
 
- RUN apt-get install -y libgdal-dev
- RUN apt-get update &&\
-    apt-get install -y binutils libproj-dev gdal-bin
+# Updating packages and installing necessary dependencies
+RUN apt-get update && \
+    apt-get install -y nano libgdal-dev binutils libproj-dev gdal-bin python3 postgresql-client && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
- COPY app/ app/
- COPY data/ test/
+# Copying app and data into the container
+COPY app/ /app/
+COPY data/ /data/
 
- #CMD ['ogr2ogr',' -f "PostgreSQL" PG:"host=127.0.0.1 dbname=postgres user=postgres password=docker" "test/indice3ans_epsg_4326.geojson']
- #RUN ogr2ogr -f "PostgreSQL" PG:"host=127.0.0.1 dbname=postgres user=postgres password=docker" "test/indice3ans_epsg_4326.geojson"
- #CMD ["/bin/sh","data/start.sh"]
+# Set up entrypoint script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# Start entrypoint script
+CMD ["/docker-entrypoint.sh"]

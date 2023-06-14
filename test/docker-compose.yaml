@@ -15,7 +15,7 @@ services:
     build:
       dockerfile: DockerfileDB
     volumes:
-      - ./data:/test
+      - ./data:/data
     environment:
       # If you need to create multiple database you can add coma separated databases eg gis,data
       - POSTGRES_DB=postgres
