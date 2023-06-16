@@ -46,8 +46,8 @@ body {
 }
 
 .menu {
-    height: 112px;
-    width: 912px;
+    height: 90px;
+    width: 100%;
     display: flex;
     justify-content: space-evenly;
     padding-top: 24px;
@@ -57,7 +57,7 @@ body {
 }
 
 .Select-control {
-    width: 256px;
+    width: 400px;
     height: 48px;
 }
 

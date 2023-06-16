@@ -3,9 +3,9 @@
 ## Ne fonctionne pas si l'on pas créé au préalable la base de données postgis!
 
 ## TODO
-- Améliorer la performance au lancement, ça prends bien 5 minutes mais après c'est super fluide → profiler?
 - Ajouter autres informations pertinentes
 - Compléter le readme avec la partie de comment faire la base de données avec les données géographiques
+- refaire les requirements.txt et environment.yml
 
 ## Installation
 

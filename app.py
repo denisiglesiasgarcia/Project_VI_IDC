@@ -8,7 +8,9 @@ from pyproj import Transformer
 import shapely
 from geoalchemy2 import Geometry, WKTElement
 from sqlalchemy import *
-from dash import Dash, html, dcc, Input, Output
+from dash import Dash, html, dcc, Input, Output, dash_table
+import dash_bootstrap_components as dbc
+from dash.dependencies import State
 import plotly.express as px
 import pandas as pd
 import geojson
@@ -16,9 +18,11 @@ import numpy as np
 import plotly.graph_objects as go
 import psycopg2
 from psycopg2 import sql
+import psycopg2.extras
 import geopandas as gpd
 import json
 from sqlalchemy import create_engine
+
 
 app = Dash(__name__)
 
@@ -92,7 +96,7 @@ app.layout = html.Div(
         # en-tête
         html.Div(
             children=[
-                html.P(children="🥑", className="header-emoji"),
+                html.P(children="☀️", className="header-emoji"),
                 html.H1(
                     children="Consommation d'énergie des bâtiments à Genève", className="header-title"
                 ),
@@ -108,7 +112,9 @@ app.layout = html.Div(
             children=[
                 html.Div(
                     children=[
-                        html.Div(children="Adresse", className="menu-title"),
+                        html.Div(children="Adresse",
+                                 className="menu-title",
+                                 ),
                         dcc.Dropdown(
                             id="dropdown_nom_rue",
                             options=dropdown_rues,
@@ -116,12 +122,15 @@ app.layout = html.Div(
                             clearable=True,
                             multi=False,
                             className="dropdown",
+                            style={'width': '400px'},
                         ),
                     ]
                 ),
                 html.Div(
                     children=[
-                        html.Div(children="Année IDC", className="menu-title"),
+                        html.Div(children="Année IDC",
+                                 className="menu-title",
+                                 ),
                         dcc.Dropdown(
                             id="dropdown_annee_idc",
                             options=dropdown_annee,
@@ -129,6 +138,7 @@ app.layout = html.Div(
                             clearable=False,
                             searchable=False,
                             className="dropdown",
+                            style={'width': '400px'},
                         ),
                     ]
                 ),
@@ -155,6 +165,37 @@ app.layout = html.Div(
                         id="graphique_histo_canton", config={"displayModeBar": False},
                     ),
                     className="card",
+                ),
+                html.Div(
+                    children=dash_table.DataTable(
+                        id='table'
+                    ),
+                    className="card",
+                ),
+                 # Add download component and button
+                dcc.Download(id="download"),
+                dbc.Row(
+                    [
+                        dbc.Col(
+                            [
+                                dcc.Dropdown(
+                                    options=[
+                                        {"label": "Excel file", "value": "excel"},
+                                        {"label": "CSV file", "value": "csv"},
+                                    ],
+                                    id="dropdown",
+                                    placeholder="Choose download file type. Default is CSV format!",
+                                )
+                            ]
+                        ),
+                        dbc.Col(
+                            [
+                                dbc.Button(
+                                    "Download Data", id="btn_csv"
+                                ),
+                            ]
+                        ),
+                    ]
                 ),
             ],
             className="wrapper",
@@ -283,7 +324,7 @@ def update_bars(nom_rue):
         )
     fig2.update_traces(marker=dict(
         color="teal"), #teal
-        width = 0.1, #0.2
+        width = 0.3, #0.2
         textfont_size=12,
         textangle=0,
         textposition="outside",
@@ -359,6 +400,88 @@ def update_histo(nom_rue, annee_idc):
     fig3.update_traces(marker=dict(color="teal", line_color="black"))
 
     return fig3
+
+# table
+@app.callback(
+    Output('table', 'data'),  # Change this to 'data' as you're updating the table's data
+    Input('dropdown_nom_rue', 'value'),)
+def update_histo(nom_rue):
+    conn = psycopg2.connect(
+            host="localhost",
+            database="postgis_sitg",
+            user="postgres",
+            password="postgres",
+            port="5432")
+
+    table_name = "SCANE_INDICE_MOYENNES_3_ANS"
+    schema_name = "sitg"
+
+    try:
+        with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
+            # Get the rows with the applied filters
+            cur.execute(f"SELECT * FROM {schema_name}.{table_name} WHERE adresse = %s ORDER BY annee ASC", (nom_rue,))
+            rows = cur.fetchall()
+
+            # Get column names
+            column_names = [desc[0] for desc in cur.description]
+
+        # Convert rows to DataFrame
+        df = pd.DataFrame(rows, columns=column_names)
+
+        column_names1 = ['annee',
+                'indice',
+                'annees_concernees_moy_3',
+                'indice_moy3',
+                'sre',
+                'egid',
+                'adresse',
+                'npa',
+                'commune',
+                'destination',
+                'nbre_preneur',
+                'date_debut_periode',
+                'date_fin_periode',
+                'agent_energetique_1',
+                'quantite_agent_energetique_1',
+                'unite_agent_energetique_1',
+                'agent_energetique_2',
+                'quantite_agent_energetique_2',
+                'unite_agent_energetique_2',
+                'agent_energetique_3',
+                'quantite_agent_energetique_3',
+                'unite_agent_energetique_3',
+                'date_saisie',
+                'id_concessionnaire',
+                ]
+        
+        df = df[column_names1]
+
+        df['date_saisie'] = pd.to_datetime(df['date_saisie'], unit='ms')
+
+        # Convert DataFrame to a list of dictionaries for Dash DataTable
+        table_data = df.to_dict('records')
+    finally:
+        conn.close()
+
+    # Return the data for Dash DataTable
+    return table_data
+
+# download
+@app.callback(
+    Output("download", "data"),
+    Input("btn_csv", "n_clicks"),
+    State("dropdown", "value"),
+    State("table", "data"),  # Get the data from the table
+    prevent_initial_call=True,
+)
+def download_data(n_clicks, download_type, table_data):
+    if n_clicks:
+        df = pd.DataFrame(table_data)  # Convert data back to DataFrame
+
+        if download_type == "csv":
+            return dcc.send_data_frame(df.to_csv, "table_data.csv")
+        else:  # 'excel'
+            return dcc.send_data_frame(df.to_excel, "table_data.xlsx")
 
 # --------------------------------------------------------------
 if __name__ == '__main__':
