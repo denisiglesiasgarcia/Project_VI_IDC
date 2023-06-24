@@ -457,6 +457,16 @@ def update_histo(nom_rue):
         df = df[column_names1]
 
         df['date_saisie'] = pd.to_datetime(df['date_saisie'], unit='ms')
+        df['date_saisie'] = df['date_saisie'].dt.strftime('%Y-%m-%d')
+        
+        df['date_debut_periode'] = pd.to_datetime(df['date_debut_periode'])
+        df['date_debut_periode'] = df['date_debut_periode'].dt.strftime('%Y-%m-%d')
+
+        df['date_fin_periode'] = pd.to_datetime(df['date_fin_periode'])
+        df['date_fin_periode'] = df['date_fin_periode'].dt.strftime('%Y-%m-%d')
+
+        # round sre column to 1 decimal place
+        df['sre'] = df['sre'].astype(float).round(1)
 
         # Convert DataFrame to a list of dictionaries for Dash DataTable
         table_data = df.to_dict('records')
