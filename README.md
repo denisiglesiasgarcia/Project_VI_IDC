@@ -3,7 +3,10 @@
 ## Ne fonctionne pas si l'on pas créé au préalable la base de données postgis!
 
 ## TODO
-- Ajouter autres informations pertinentes
+- Ajouter informations pertinentes pour AMOén
+  - EGID
+  - Autorisation de construire → parsing?
+  - Répartition SRE par affectations → Qww?
 - Compléter le readme avec la partie de comment faire la base de données avec les données géographiques
 - refaire les requirements.txt et environment.yml
 
