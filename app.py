@@ -48,7 +48,7 @@ with conn.cursor() as cur:
     cur.execute(f"SELECT DISTINCT ADRESSE FROM {schema_name}.{table_name} ORDER BY ADRESSE ASC")
     results_dropdown_rues = cur.fetchall()
 
-    '''
+
     # Reno obligatoire
     cur.execute(f"ALTER TABLE {schema_name}.{table_name} ADD COLUMN IF NOT EXISTS renovation TEXT")
     conn.commit()
@@ -60,7 +60,7 @@ with conn.cursor() as cur:
                     END;
                 """)
     conn.commit()
-    '''
+
     
     # SRID
     srid = 4326
