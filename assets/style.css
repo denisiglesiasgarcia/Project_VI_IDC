@@ -6,8 +6,11 @@ body {
 
 .header {
     background-color: #000000;
-    height: 288px;
+    height: 150px;
     padding: 16px 0 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .header-emoji {
@@ -34,43 +37,82 @@ body {
 .wrapper {
     margin-right: auto;
     margin-left: auto;
-    max-width: 1024px;
+    max-width: 2048px;
     padding-right: 10px;
     padding-left: 10px;
     margin-top: 32px;
 }
 
+.graph {
+    display: flex;
+    height: 1200px;
+}
+
 .card {
+    height: 100%;
     margin-bottom: 24px;
     box-shadow: 0 4px 6px 0 rgba(0, 0, 0, 0.18);
 }
 
 .menu {
-    height: 90px;
+    height: auto;
     width: 100%;
     display: flex;
     justify-content: space-evenly;
     padding-top: 24px;
-    margin: -80px auto 0 auto;
+    margin: 0 auto; /* Removed the negative margin */
     background-color: #FFFFFF;
     box-shadow: 0 4px 6px 0 rgba(0, 0, 0, 0.18);
 }
 
-.Select-control {
+.dropdown {
     width: 400px;
     height: 48px;
-}
-
-.Select--single > .Select-control .Select-value, .Select-placeholder {
-    line-height: 48px;
-}
-
-.Select--multi .Select-value-label {
-    line-height: 32px;
 }
 
 .menu-title {
     margin-bottom: 6px;
     font-weight: bold;
     color: #000000;
+}
+
+.link-button {
+    margin: 10px;   /* Add spacing between buttons */
+    background-color: #4CAF50; /* Green background */
+    border: none;  /* Remove border */
+    color: white;  /* White text color */
+    padding: 15px 32px;  /* Button size */
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    cursor: pointer;  /* Pointer cursor on hover */
+    background-color: #45a049;
+    transition: background-color 0.3s;
+}
+
+.overview-title {
+    margin-top: 20px;
+    font-size: 24px;
+    color: #333;
+    /* other styles as needed */
+}
+
+.header-content {
+    padding-left: 30px;  /* Adjust as needed */
+    width: 70%;  /* Adjust based on your design preference */
+    display: inline-block;
+    vertical-align: top;  /* Aligns the content to the top of the header */
+}
+
+.header-navigation {
+    padding-right: 30px;  /* Adjust as needed */
+    display: flex;
+    gap: 10px;  /* Spacing between the buttons */
+}
+
+.link-button {
+    margin-left: 10px;  /* Adds spacing between buttons if there are multiple */
+    display: inline-block;  /* Puts the buttons side by side */
+    /* Other styles as you provided earlier */
 }

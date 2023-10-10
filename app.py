@@ -22,9 +22,73 @@ import psycopg2.extras
 import geopandas as gpd
 import json
 from sqlalchemy import create_engine
+import matplotlib.pyplot as plt
+import seaborn as sns
+from skimage import io
+import base64
+
+from graphics.performance_par_site import performance_par_site
+
+app = Dash(__name__, suppress_callback_exceptions=True)
 
 
-app = Dash(__name__)
+# --------------------------------------------------------------
+# data AMOén
+# --------------------------------------------------------------
+
+df_amoen = pd.read_excel(r"C:\Users\denis.iglesias\OneDrive - HESSO\01 Institution\02 Projets\12 AMOén\03 Projets\Suivi_projets_AMOen_dernier.xlsx",sheet_name="Vue ensemble")
+df_amoen = df_amoen.dropna(subset=['Nom_projet'])
+df_amoen = df_amoen.drop(columns=['N°', 'résèrve', 'COP', 'AMO\nrex', 'Priorité',])
+
+dropdown_projet = [{"label": val, "value": val} for val in df_amoen['Nom_projet'].unique() if val is not None]
+
+# préparer df pour stacked bar
+df_analyse_stacked = df_amoen
+df_analyse_stacked = df_analyse_stacked[['statut',
+                                        'Nom_projet',
+                                         'Ef,obj*fp (Objectif en EF pondérée après) [MJ/m²]',
+                                         'Ef,après,corr*fp (Conso. mesurée après) [MJ/m²]',
+                                         ]]
+df_analyse_stacked = df_analyse_stacked.groupby(['statut']).count()
+df_analyse_stacked = df_analyse_stacked.reset_index()
+# Objectif fixé / Réception d'index
+df_analyse_stacked = df_analyse_stacked.rename(columns={'Ef,obj*fp (Objectif en EF pondérée après) [MJ/m²]': 'Objectif fixé',
+                                                        'Ef,après,corr*fp (Conso. mesurée après) [MJ/m²]': 'Réception d\'index'})
+df_analyse_stacked['Objectif fixé'] = df_analyse_stacked['Objectif fixé'] - df_analyse_stacked['Réception d\'index']
+# Finalisé
+df_analyse_stacked["Finalisé"] = df_analyse_stacked[df_analyse_stacked["statut"] == "Terminé"]['Nom_projet']
+df_analyse_stacked["Finalisé"] = df_analyse_stacked["Finalisé"].fillna(0)
+df_analyse_stacked["Finalisé"] = df_analyse_stacked["Finalisé"].astype(int)
+df_analyse_stacked.loc[df_analyse_stacked["statut"] == "Terminé", 'Objectif fixé'] = 0
+df_analyse_stacked.loc[df_analyse_stacked["statut"] == "Terminé", 'Réception d\'index'] = 0
+# Pas d'objectif fixé
+df_analyse_stacked["Pas d'objectif fixé"] = df_analyse_stacked['Nom_projet'] - \
+                                            df_analyse_stacked['Objectif fixé'] - \
+                                            df_analyse_stacked['Réception d\'index'] - \
+                                            df_analyse_stacked['Finalisé']
+df_analyse_stacked["Pas d'objectif fixé"] = df_analyse_stacked["Pas d'objectif fixé"].fillna(0)
+df_analyse_stacked["Pas d'objectif fixé"] = df_analyse_stacked["Pas d'objectif fixé"].astype(int)
+#df_analyse_stacked = df_analyse_stacked.drop(columns=['Nom_projet'])
+df_analyse_stacked['total'] = df_analyse_stacked['Objectif fixé'] + df_analyse_stacked['Réception d\'index'] + df_analyse_stacked["Pas d'objectif fixé"] + df_analyse_stacked["Finalisé"]
+# add in column status at the end a row total that sums all the values
+df_analyse_stacked = df_analyse_stacked[['statut','Pas d\'objectif fixé','Objectif fixé', 'Réception d\'index', 'Finalisé']] #,'total','Nom_projet'
+# changer ordre des statuts
+# https://stackoverflow.com/questions/57161380/changing-row-order-in-pandas-dataframe-without-losing-or-messing-up-data
+cats = ['Etude', "Demande d’autorisation", "En travaux", "En exploitation","Terminé"]
+df_analyse_stacked['statut'] = pd.CategoricalIndex(df_analyse_stacked['statut'], ordered=True, categories=cats)
+df_analyse_stacked = df_analyse_stacked.sort_values('statut')
+# replace in column statut the value Terminé by Finalisé
+df_analyse_stacked['statut'] = df_analyse_stacked['statut'].replace('Demande d’autorisation', 'Autor.')
+df_analyse_stacked['statut'] = df_analyse_stacked['statut'].replace('En travaux', 'Travaux')
+df_analyse_stacked['statut'] = df_analyse_stacked['statut'].replace('En exploitation', 'Exploit.')
+# reset index
+df_analyse_stacked = df_analyse_stacked.reset_index(drop=True)
+
+
+# --------------------------------------------------------------
+# data SITG
+# --------------------------------------------------------------
+
 
 # Establish a connection to the database
 conn = psycopg2.connect(
@@ -91,19 +155,26 @@ external_stylesheets = [
     },
 ]
 
-app.layout = html.Div(
+app.layout = html.Div([
+    dcc.Location(id='url', refresh=False),
+    html.Div(id='page-content')
+])
+
+projects_layout = html.Div(
     children=[
-        # en-tête
+        # Header
         html.Div(
             children=[
-                html.P(children="☀️", className="header-emoji"),
-                html.H1(
-                    children="Consommation d'énergie des bâtiments à Genève", className="header-title"
-                ),
-                html.P(
-                    children="Dashboard pour permettre de voir l'évolution de la consommation d'énergie des bâtiments à Genève.",
-                    className="header-description",
-                ),
+                html.H1(children="Dashboard AMOén", className="header-title"),
+                html.P(children="Par projet", className="header-description"),
+                # Navigation links/buttons
+                html.Div(
+                    children=[
+                        dcc.Link(html.Button("Vue d'ensemble", className='link-button'), href='/overview'),
+                        dcc.Link(html.Button('Par projet', className='link-button'), href='/projects')
+                    ],
+                    className="header-navigation"
+                )
             ],
             className="header",
         ),
@@ -118,27 +189,27 @@ app.layout = html.Div(
                         dcc.Dropdown(
                             id="dropdown_nom_rue",
                             options=dropdown_rues,
-                            value="Rue CAVOUR 20",
+                            value=None,
                             clearable=True,
-                            multi=False,
+                            multi=True,
                             className="dropdown",
-                            style={'width': '400px'},
+                            style={'width': '1000px'},
                         ),
                     ]
                 ),
                 html.Div(
                     children=[
-                        html.Div(children="Année IDC",
-                                 className="menu-title",
-                                 ),
+                        html.Div(children="Nom Projet",
+                                className="menu-title",
+                                ),
                         dcc.Dropdown(
-                            id="dropdown_annee_idc",
-                            options=dropdown_annee,
-                            value='2021',
-                            clearable=False,
-                            searchable=False,
+                            id="dropdown_nom_projet",
+                            options=dropdown_projet,
+                            value="Prulay 43 à 47_Batineg",
+                            clearable=True,
+                            searchable=True,
                             className="dropdown",
-                            style={'width': '400px'},
+                            style={'width': '500px'},
                         ),
                     ]
                 ),
@@ -150,21 +221,22 @@ app.layout = html.Div(
             children=[
                 html.Div(
                     children=dcc.Graph(
-                        id="plan_vue_rue", config={"displayModeBar": False},
+                        id="plan_vue_rue", config={"displayModeBar": True},
                     ),
                     className="card",
                 ),
                 html.Div(
                     children=dcc.Graph(
-                        id="graphique_bars_idc", config={"displayModeBar": False},
+                        id="graphique_bars_idc",
+                        config={"displayModeBar": True},
                     ),
                     className="card",
                 ),
                 html.Div(
-                    children=dcc.Graph(
-                        id="graphique_histo_canton", config={"displayModeBar": False},
-                    ),
+                    children=html.Img(id='performance-site-image',
+                                      style={'width': '75%', 'height': '75%'}),
                     className="card",
+                    style={'display': 'flex', 'justifyContent': 'center', 'alignItems': 'center'}
                 ),
                 html.Div(
                     children=dash_table.DataTable(
@@ -203,13 +275,137 @@ app.layout = html.Div(
     ]
 )
 
+# stacked bar chart
+bars = []
+for col in df_analyse_stacked.columns[1:]:    # Iterate over all columns except 'statut'
+    serie = df_analyse_stacked[col]
+    bars.append(go.Bar(name=col, x=df_analyse_stacked['statut'] , y=serie, 
+                       text=serie,   # display the serie value as hover text 
+                       textposition='auto',   # automate the position
+                       hoverinfo='name+x+text'))    # decide what info appears on hover
+layout_bar_stacked = go.Layout(
+    barmode='stack', 
+    xaxis=dict(title='Statut'),
+    yaxis=dict(title='Nombre de projets'),
+)
+fig_bars_stacked = go.Figure(data=bars, layout=layout_bar_stacked)
+fig_bars_stacked.update_layout(
+    barmode="stack",
+    title="Statut des projets AMOén")  # set your title here
+
 # --------------------------------------------------------------
+# overview layout
+# --------------------------------------------------------------
+overview_layout = html.Div(
+    children=[
+        # Header
+        html.Div(
+            children=[
+                html.H1(children="Dashboard AMOén", className="header-title"),
+                html.P(children="Vue d'ensemble", className="header-description"),
+                # Navigation links/buttons
+                html.Div(
+                    children=[
+                        dcc.Link(html.Button("Vue d'ensemble", className='link-button'), href='/overview'),
+                        dcc.Link(html.Button('Par projet', className='link-button'), href='/projects')
+                    ],
+                    className="header-navigation"
+                )
+            ],
+            className="header",
+        ),
+        # Overview section
+        html.Div(  # Wrap the overview content in its own container
+            children=[
+                dcc.Graph(
+                    id='statut-chart',
+                    figure=fig_bars_stacked,
+                    style={'marginTop': '20px'},  # Add some margin above the chart
+                ),
+                
+                html.H2('Overview of All Projects', className="overview-title"),  # Add a class for styling
+                
+                dash_table.DataTable(
+                    id='table',
+                    columns=[{"name": i, "id": i} for i in df_amoen.columns],
+                    data=df_amoen.to_dict('records'),
+                    filter_action="native",  # enable filtering
+                    sort_action="native",     # enable sorting
+                    style_table={'margin': '20px 0'},  # Add some margin around the table
+                ),
+            ],
+            style={'padding': '20px'},  # Add some padding around the overview section
+        )
+    ],
+    style={'margin': '0px', 'padding': '0px'}
+)
+
+@app.callback(Output('page-content', 'children'),
+              [Input('url', 'pathname')])
+def display_page(pathname):
+    if pathname == '/projects':
+        return projects_layout
+    elif pathname == '/overview':
+        return overview_layout
+    else:
+        # This can be a custom 404 layout
+        return html.Div([
+            html.H3('404: Page not found')
+        ])
+
+# --------------------------------------------------------------
+# overview
+# --------------------------------------------------------------
+
+@app.callback(Output('graph-container', 'children'),
+              [Input('table', 'derived_virtual_data'),
+               Input('table', 'derived_virtual_selected_rows')])
+def update_graphs(rows, derived_virtual_selected_rows):
+    # When table is first rendered 'derived_virtual_data' and
+    # 'derived_virtual_selected_rows' will be None, so, skip those updates.
+    if derived_virtual_selected_rows is None:
+        derived_virtual_selected_rows = []
+
+    selected_df = pd.DataFrame(rows).iloc[derived_virtual_selected_rows]
+
+    # Now you can use the selected subset of data in 'selected_df' DataFrame
+    # and update your graph accordingly. Example:
+    _, ax = plt.subplots()
+    for i in range(len(selected_df)):
+        selected_df.iloc[i].plot(ax=ax)
+    fig = go.Figure(data=go.Scatter(x=selected_df[0], y=selected_df[1]))
+    return dcc.Graph(figure=fig)
+
+# --------------------------------------------------------------
+# projets
+# --------------------------------------------------------------
+
+# remplir adresses avec nom des projets AMOén
+@app.callback(
+    [Output('dropdown_nom_rue', 'options'),
+     Output('dropdown_nom_rue', 'value')],  # Added this line to also update the value property
+    Input('dropdown_nom_projet', 'value')
+)
+def update_adresse_dropdown(selected_project):
+    if selected_project:
+        # Filter the dataframe based on selected project
+        relevant_rows = df_amoen[df_amoen['Nom_projet'] == selected_project]
+        
+        # Extract addresses
+        all_addresses = relevant_rows['Rues'].iloc[0].split("\n")
+        options = [{"label": addr, "value": addr} for addr in all_addresses]
+        
+        return options, all_addresses  # Also return all_addresses as the value
+    else:
+        # Return an empty list if no project is selected
+        return [], []  # Return empty list for the value as well
+
 # plan rue
 @app.callback(
     Output('plan_vue_rue', 'figure'),
-    Input('dropdown_nom_rue', 'value'),
-    Input('dropdown_annee_idc', 'value'))
-def update_graph(nom_rue, annee_idc):
+    Input('dropdown_nom_rue', 'value')
+)
+def update_graph(nom_rues):
     conn = psycopg2.connect(
         host="localhost",
         database="postgis_sitg",
@@ -217,189 +413,132 @@ def update_graph(nom_rue, annee_idc):
         password="postgres",
         port="5432")
 
-    # Set the schema and table names
     table_name = "SCANE_INDICE_MOYENNES_3_ANS"
     schema_name = "sitg"
 
     with conn.cursor() as cur:
-        # Get the column names
-        cur.execute(f"SELECT * FROM {schema_name}.{table_name} LIMIT 1")
-        columns = [desc[0] for desc in cur.description]
-
-        # Get the headers with the applied filters
-        cur.execute(f"SELECT * FROM {schema_name}.{table_name} WHERE adresse = %s AND annee = %s", (nom_rue, annee_idc))
+        if len(nom_rues) == 1:
+            cur.execute(f"SELECT * FROM {schema_name}.{table_name} WHERE adresse = %s", (nom_rues[0],))
+        else:
+            cur.execute(f"SELECT * FROM {schema_name}.{table_name} WHERE adresse = ANY(%s)", (nom_rues,))
         headers = cur.fetchall()
 
-    # Print the results
-    df = pd.DataFrame(headers, columns=columns)
-
-    # Ensure 'geometry' is a GeoSeries object
+    df = pd.DataFrame(headers, columns=[desc[0] for desc in cur.description])
     df['geometry'] = gpd.GeoSeries.from_wkb(df['geometry'])
-
-    # Create GeoDataFrame
     gdf = gpd.GeoDataFrame(df, geometry='geometry')
-
-    # Set the current CRS for the GeoDataFrame
     gdf.set_crs("EPSG:2056", inplace=True)
-
-    # convert to WGS84
     gdf = gdf.to_crs("EPSG:4326")
 
-    # # Transform the coordinates to WGS84 (EPSG:4326)
-    # gdf['geometry'] = gdf['geometry'].apply(lambda geom: shapely.ops.transform(transformer.transform, geom))
+    unique_addresses = gdf['adresse'].unique()
+    colors = px.colors.qualitative.Set1
+    address_to_color = {addr: colors[i % len(colors)] for i, addr in enumerate(unique_addresses)}
+    gdf['color'] = gdf['adresse'].map(address_to_color)
 
-    # Calculate centroid and assign to new columns
-    gdf['coordonnees_rue_lat'] = gdf['geometry'].centroid.y
-    gdf['coordonnees_rue_lon'] = gdf['geometry'].centroid.x
+    geojson = gdf.geometry.__geo_interface__
 
-    mean_lat = gdf['coordonnees_rue_lat'].mean()
-    mean_lon = gdf['coordonnees_rue_lon'].mean()
-
-    # convert gdf to geojson
-    geojson = gdf.__geo_interface__
-
-    # convert gdf to pandas dataframe and remove geometry column
-    df_plot = gdf.drop(columns=['geometry'])
-
-    # Plan
-    fig1 = px.choropleth_mapbox(df_plot,
-                                geojson=geojson,
-                                color="indice",
-                                locations="egid",
-                                featureidkey="properties.egid",
-                                center={"lat": mean_lat, "lon": mean_lon},
-                                mapbox_style="carto-positron",
-                                title="Plan de situation d'indice pour " + str(nom_rue),
-                                zoom=17,
-                                labels={'adresse': 'npa'})
+    fig1 = px.choropleth_mapbox(gdf, 
+                                geojson=geojson, 
+                                locations=gdf.index, 
+                                color="adresse",  
+                                color_discrete_map=address_to_color,
+                                hover_name="adresse", 
+                                hover_data=["indice"],
+                                mapbox_style="carto-positron", 
+                                center={"lat": gdf.geometry.centroid.y.mean(), "lon": gdf.geometry.centroid.x.mean()},
+                                zoom=16,
+                                labels={"adresse": "Adresse"},
+                                title="Vue en plan"
+                                )
     
-    # Close the connection
     cur.close()
     conn.close()
-    
+
     return fig1
 
 # graphique bars
 @app.callback(
     Output('graphique_bars_idc', 'figure'),
     Input('dropdown_nom_rue', 'value'))
-def update_bars(nom_rue):
+def update_bars(nom_rues):
     conn = psycopg2.connect(
-            host="localhost",
-            database="postgis_sitg",
-            user="postgres",
-            password="postgres",
-            port="5432")
+        host="localhost",
+        database="postgis_sitg",
+        user="postgres",
+        password="postgres",
+        port="5432")
 
-    # Set the schema and table names
     table_name = "SCANE_INDICE_MOYENNES_3_ANS"
     schema_name = "sitg"
 
+    dfs = []  # A list to hold dataframes for each building
     with conn.cursor() as cur:
-        # Get the headers with the applied filters
-        cur.execute(f"SELECT annee, indice FROM {schema_name}.{table_name} WHERE adresse = %s ORDER BY annee ASC", (nom_rue,))
-        headers = cur.fetchall()
+        for nom_rue in nom_rues:
+            cur.execute(f"SELECT annee, indice, adresse FROM {schema_name}.{table_name} WHERE adresse = %s ORDER BY annee ASC", (nom_rue,))
+            rows = cur.fetchall()
+            df = pd.DataFrame(rows, columns=['annee', 'indice', 'adresse'])
+            
+            # Ensure the data types are correct
+            df['annee'] = df['annee'].astype(int)
+            df['indice'] = df['indice'].astype(float)
+            
+            dfs.append(df)
 
-    # Print the results
-    df_plot2 = pd.DataFrame(headers, columns=['annee', 'indice'])
-    df_plot2['indice'] = df_plot2['indice'].astype(int)
-    df_plot2['annee'] = df_plot2['annee'].astype(int)
+    # Combine all dataframes into a single one
+    all_data = pd.concat(dfs, ignore_index=True)
 
-    # close the connection
-    conn.close()
-    cur.close()
+    # Get unique addresses from the data
+    unique_addresses = all_data['adresse'].unique()
 
-    fig2 = px.bar(df_plot2, x='annee', y='indice', text_auto=True)
+    # Generate a list of colors for each unique address.
+    all_colors = plt.cm.tab10.colors + plt.cm.tab20c.colors + plt.cm.Set3.colors
+    if len(unique_addresses) > len(all_colors):
+        print("Error: Number of unique addresses exceed available colors.")
+        return go.Figure()
 
-    fig2.update_layout(
-        title="Indice de dépense de chaleur [MJ/(m²*an)] le bâtiment situé: " + str(nom_rue),
+    # Simple color palette for debugging
+    color_palette = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b',
+                     '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'] * 3  # This is just a repeat of the default color cycle
+
+    fig = go.Figure()
+
+    for idx, address in enumerate(unique_addresses):
+        df_address = all_data[all_data['adresse'] == address]
+        fig.add_trace(
+            go.Bar(
+                x=df_address['annee'],
+                y=df_address['indice'],
+                name=address,
+                marker_color=color_palette[idx]
+            )
+        )
+
+    fig.update_layout(
+        barmode='group',
+        title="Indice de dépense de chaleur [MJ/(m²*an)] par bâtiment",
         xaxis_title="Années",
         yaxis_title="Indice de dépense de chaleur [MJ/(m²*an)]",
-        legend_title="Légende",
-        xaxis = dict(tickmode = 'linear', dtick = 1),
+        xaxis=dict(tickmode='linear', dtick=1),
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
-        modebar = dict(bgcolor='rgba(0, 0, 0, 0)') # RGB (224,215,255) rgba(0, 0, 0, 0)
-        #bargap=0.0
-        )
-    fig2.update_traces(marker=dict(
-        color="teal"), #teal
-        width = 0.3, #0.2
-        textfont_size=12,
-        textangle=0,
-        textposition="outside",
-        cliponaxis=True)
-    fig2.update_layout(uniformtext_minsize=12, uniformtext_mode='show')
-    fig2.update_yaxes(visible=False)
+        modebar=dict(bgcolor='rgba(0, 0, 0, 0)'),
+        bargap=0.10
+    )
 
-    return fig2
+    return fig
 
-# graphique histogramme général
+
+# graphique performance
 @app.callback(
-    Output('graphique_histo_canton', 'figure'),
-    Input('dropdown_nom_rue', 'value'),
-    Input('dropdown_annee_idc', 'value'))
-
-def update_histo(nom_rue, annee_idc):
-    conn = psycopg2.connect(
-            host="localhost",
-            database="postgis_sitg",
-            user="postgres",
-            password="postgres",
-            port="5432")
-
-    # Set the schema and table names
-    table_name = "SCANE_INDICE_MOYENNES_3_ANS"
-    schema_name = "sitg"
-
-    limite_outlier = 1000
-
-    with conn.cursor() as cur:
-        # Get the headers with the applied filters
-        cur.execute(f"SELECT annee, indice FROM {schema_name}.{table_name} WHERE adresse = %s AND annee = %s", (nom_rue, annee_idc))
-        headers_idc = cur.fetchall()
-
-        # Get the headers with the applied filters
-        cur.execute(f"SELECT annee, indice, renovation FROM {schema_name}.{table_name} WHERE indice::integer < {limite_outlier} AND annee = %s", (annee_idc,))
-        headers_histo = cur.fetchall()
-
-    # ligne idc du bâtiment sur histogramme
-    idc_annee_calcul = pd.DataFrame(headers_idc, columns=['annee', 'indice'])
-    idc_annee_calcul['indice'] = idc_annee_calcul['indice'].astype(int)
-    idc_annee_calcul['annee'] = idc_annee_calcul['annee'].astype(int)
-    idc_annee_calcul = idc_annee_calcul.iloc[0][1]
-
-    # data histogramme
-    df_plot3  = pd.DataFrame(headers_histo, columns=['annee', 'indice', 'renovation'])
-    df_plot3['indice'] = df_plot3['indice'].astype(int)
-    df_plot3['annee'] = df_plot3['annee'].astype(int)
-
-    # histo
-    fig3 = px.histogram(df_plot3, x='indice', pattern_shape='renovation', nbins=25, pattern_shape_sequence=["", "/"])
-    ## ligne verticale
-    #fig3.add_vline(x=idc_annee_calcul, line_dash = 'dash', line_color = 'black', name=nom_rue)
-    fig3.add_trace(go.Scatter(x=[idc_annee_calcul,idc_annee_calcul],
-        y=[25,2500], 
-        mode='lines', 
-        line=dict(color='black', width=3, dash='dash'),
-        name=nom_rue + ' IDC ' + str(annee_idc)))
-    ## rendre joli le truc
-    fig3.update_layout(
-        title="Histogramme des bâtiments du canton " + str(annee_idc),
-        xaxis_title="Indice de dépense de chaleur [MJ/(m²*an)]",
-        yaxis_title="Nombre de bâtiments",
-        legend_title="Légende",
-        ### xticks
-        xaxis = dict(tickmode = 'linear', dtick = 50),
-        ### modifier couleur fond et style
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        modebar = dict(bgcolor='rgba(0, 0, 0, 0)'),
-        bargap=0.10)
-    ## couleur de histo
-    fig3.update_traces(marker=dict(color="teal", line_color="black"))
-
-    return fig3
+    Output('performance-site-image', 'src'),
+    [Input('dropdown_nom_projet', 'value')])
+def performance_site(nom_projet):
+    image_filename = performance_par_site(df_amoen, nom_projet)
+    encoded_image = base64.b64encode(open(image_filename, 'rb').read())
+    
+    # delete the image file
+    os.remove(image_filename)
+    
+    return f'data:image/png;base64,{encoded_image.decode()}'
 
 # table
 @app.callback(
@@ -419,7 +558,7 @@ def update_histo(nom_rue):
     try:
         with conn.cursor(cursor_factory=psycopg2.extras.DictCursor) as cur:
             # Get the rows with the applied filters
-            cur.execute(f"SELECT * FROM {schema_name}.{table_name} WHERE adresse = %s ORDER BY annee ASC", (nom_rue,))
+            cur.execute(f"SELECT * FROM {schema_name}.{table_name} WHERE adresse = ANY(%s) ORDER BY annee ASC", (nom_rue,))
             rows = cur.fetchall()
 
             # Get column names
