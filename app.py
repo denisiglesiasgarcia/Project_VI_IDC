@@ -166,12 +166,12 @@ projects_layout = html.Div(
         html.Div(
             children=[
                 html.H1(children="Dashboard AMOén", className="header-title"),
-                html.P(children="Par projet", className="header-description"),
+
                 # Navigation links/buttons
                 html.Div(
                     children=[
-                        dcc.Link(html.Button("Vue d'ensemble", className='link-button'), href='/overview'),
-                        dcc.Link(html.Button('Par projet', className='link-button'), href='/projects')
+                        dcc.Link(html.Button("Vue d'ensemble", className='link-button', id='link-overview'), href='/overview'),
+                        dcc.Link(html.Button('Par projet', className='link-button', id='link-projects'), href='/projects')
                     ],
                     className="header-navigation"
                 )
@@ -275,6 +275,20 @@ projects_layout = html.Div(
     ]
 )
 
+@app.callback(
+    [Output('link-overview', 'className'),
+     Output('link-projects', 'className')],
+    [Input('url', 'pathname')]
+)
+def update_button_style(pathname):
+    if pathname == '/projects':
+        return 'link-button', 'link-button active-button'
+    elif pathname == '/overview':
+        return 'link-button active-button', 'link-button'
+    else:
+        return 'link-button', 'link-button'
+
+
 # stacked bar chart
 bars = []
 for col in df_analyse_stacked.columns[1:]:    # Iterate over all columns except 'statut'
@@ -302,12 +316,11 @@ overview_layout = html.Div(
         html.Div(
             children=[
                 html.H1(children="Dashboard AMOén", className="header-title"),
-                html.P(children="Vue d'ensemble", className="header-description"),
                 # Navigation links/buttons
                 html.Div(
                     children=[
-                        dcc.Link(html.Button("Vue d'ensemble", className='link-button'), href='/overview'),
-                        dcc.Link(html.Button('Par projet', className='link-button'), href='/projects')
+                        dcc.Link(html.Button("Vue d'ensemble", className='link-button', id='link-overview'), href='/overview'),
+                        dcc.Link(html.Button('Par projet', className='link-button', id='link-projects'), href='/projects')
                     ],
                     className="header-navigation"
                 )
