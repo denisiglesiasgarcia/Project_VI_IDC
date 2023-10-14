@@ -26,8 +26,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from skimage import io
 import base64
+import datetime
 
 from graphics.performance_par_site import performance_par_site
+from graphics.performance_site_general import performance_site_general
 
 app = Dash(__name__, suppress_callback_exceptions=True)
 
@@ -85,6 +87,17 @@ df_analyse_stacked['statut'] = df_analyse_stacked['statut'].replace('En exploita
 df_analyse_stacked = df_analyse_stacked.reset_index(drop=True)
 
 
+LISTE_TERMINE_EXPLOITATION = ['Saule 99-101 et 81-85',
+                              'Bossons 82-88_RG',
+                              'Michel-Chauvet 6-8_Rentes Genevoises',
+                              'Lully 2_coopérative',
+                              'Lausanne 42-44_Implenia',
+                              'Clochette 6_CAP',
+                              'Golette 20_Meyrin',
+                              'Montagne 4-10_Mathez',
+                              'Lamartine 27_Bersier',
+                              'Prulay 37 à 41_Batineg',
+                              'Prulay 43 à 47_Batineg']
 # --------------------------------------------------------------
 # data SITG
 # --------------------------------------------------------------
@@ -141,9 +154,12 @@ dropdown_rues = [{"label": i[0], "value": i[0]} for i in results_dropdown_rues]
 cur.close()
 conn.close()
 
-# histogramme
-## limiter les outliers
-limite_outlier = 1000
+# image performance globales
+image_filename_performance_site_general = performance_site_general(df_amoen, LISTE_TERMINE_EXPLOITATION)
+#encoded_image_site_general = base64.b64encode(open(image_filename_performance_site_general, 'rb').read())
+with open(image_filename_performance_site_general, "rb") as image:
+    encoded_image_site_general = base64.b64encode(image.read()).decode('utf-8')
+#os.remove(image_filename_performance_site_general) # delete the image file
 
 # --------------------------------------------------------------
 
@@ -335,9 +351,15 @@ overview_layout = html.Div(
                     figure=fig_bars_stacked,
                     style={'marginTop': '20px'},  # Add some margin above the chart
                 ),
-                
+                html.Div(
+                    children=html.Img(
+                        id='performance_site_general-image',
+                        src=f'data:image/png;base64,{encoded_image_site_general}',
+                        style={'width': '120%', 'display': 'block', 'margin': '0 auto'}
+                    ),
+                    className="card",
+                ),
                 html.H2('Overview of All Projects', className="overview-title"),  # Add a class for styling
-                
                 dash_table.DataTable(
                     id='table',
                     columns=[{"name": i, "id": i} for i in df_amoen.columns],
@@ -462,7 +484,6 @@ def update_graph(nom_rues):
                                 labels={"adresse": "Adresse"},
                                 title="Vue en plan"
                                 )
-    
     cur.close()
     conn.close()
 
